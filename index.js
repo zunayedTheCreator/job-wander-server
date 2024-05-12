@@ -24,9 +24,44 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-
+    const { ObjectId } = require('mongodb');
+    
     const userCollection = client.db('jobWander').collection('user');
+    const jobCollection = client.db('jobWander').collection('job');
 
+    // job api
+    app.get('/job', async (req, res) => {
+        const cursor = jobCollection.find();
+        const result = await cursor.toArray();
+          res.send(result);
+    });
+        
+    app.get('/job/:identifier', async (req, res) => {
+    const identifier = req.params.identifier;
+    try {
+        let result;
+        if (ObjectId.isValid(identifier)) {
+        result = await jobCollection.findOne({ _id: new ObjectId(identifier) });
+        } else {
+        result = await jobCollection.find({ $or: [{ user_email: identifier }, { job_category: identifier }] }).toArray();
+        }
+        if (!result) {
+        return res.status(404).send('Item not found');
+        }
+        res.send(result);
+    } catch (error) {
+        console.error('Error retrieving item:', error);
+        res.status(500).send('Error retrieving item');
+    }
+    });
+
+    app.post('/job', async (req, res) => {
+      const newJob = req.body;
+      console.log(newJob);
+      const result = await jobCollection.insertOne(newJob)
+      res.send(result)
+    })
+    
     // user api
     app.get('/user', async(req, res) => {
         const cursor = userCollection.find();
@@ -41,7 +76,7 @@ async function run() {
         const result = await cursor.toArray();
         res.send(result);
     });
-    
+
     app.post('/user', async(req, res) => {
         const newUser = req.body;
         console.log(newUser);
