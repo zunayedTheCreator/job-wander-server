@@ -34,6 +34,14 @@ async function run() {
         res.send(result);
     })
 
+    app.get('/user/:email', async (req, res) => {
+        const email = req.params.email;
+        const query = {email: email}
+        const cursor = userCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+    });
+    
     app.post('/user', async(req, res) => {
         const newUser = req.body;
         console.log(newUser);
