@@ -28,6 +28,7 @@ async function run() {
       
       const userCollection = client.db('jobWander').collection('user');
       const jobCollection = client.db('jobWander').collection('job');
+      const appliedCollection = client.db('jobWander').collection('appliedJob');
 
     // job api
     app.get('/job', async (req, res) => {
@@ -100,6 +101,20 @@ async function run() {
       res.send(result)
     })
 
+    app.patch('/job/:id', async (req, res) => {
+        const id = req.params.id;
+        try {
+            const filter = { _id: new ObjectId(id) };
+            const update = { $inc: { total_applicants: 1 } };
+            const result = await jobCollection.updateOne(filter, update);
+            res.send(result);
+        } catch (error) {
+            console.error('Error updating document:', error);
+            res.status(500).send('Error updating document');
+        }
+    });
+    
+
     app.delete('/job/:id', async (req, res) => {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -118,7 +133,7 @@ async function run() {
         const result = await cursor.toArray();
         res.send(result);
     })
-
+    
     app.get('/user/:email', async (req, res) => {
         const email = req.params.email;
         const query = {email: email}
@@ -126,11 +141,33 @@ async function run() {
         const result = await cursor.toArray();
         res.send(result);
     });
-
+    
     app.post('/user', async(req, res) => {
         const newUser = req.body;
         console.log(newUser);
         const result = await userCollection.insertOne(newUser)
+        res.send(result);
+    })
+    
+    // applied jobs api
+    app.get('/applied', async(req, res) => {
+        const cursor = appliedCollection.find();
+        const result = await cursor.toArray();
+        res.send(result);
+    })
+    
+    app.get('/applied/:email', async (req, res) => {
+        const email = req.params.email;
+        const query = {email: email}
+        const cursor = appliedCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+    });
+    
+    app.post('/applied', async(req, res) => {
+        const newUser = req.body;
+        console.log(newUser);
+        const result = await appliedCollection.insertOne(newUser)
         res.send(result);
     })
 
