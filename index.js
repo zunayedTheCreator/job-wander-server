@@ -22,18 +22,18 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
-    const { ObjectId } = require('mongodb');
-    
-    const userCollection = client.db('jobWander').collection('user');
-    const jobCollection = client.db('jobWander').collection('job');
+      // Connect the client to the server	(optional starting in v4.7)
+      await client.connect();
+      const { ObjectId } = require('mongodb');
+      
+      const userCollection = client.db('jobWander').collection('user');
+      const jobCollection = client.db('jobWander').collection('job');
 
     // job api
     app.get('/job', async (req, res) => {
         const cursor = jobCollection.find();
         const result = await cursor.toArray();
-          res.send(result);
+        res.send(result);
     });
         
     app.get('/job/:identifier', async (req, res) => {
@@ -55,12 +55,38 @@ async function run() {
     }
     });
 
+    app.get('/job', async (req, res) => {
+        const { query } = req.query;
+
+        try {
+            const result = await jobCollection.find({
+                job_title: { $regex: query, $options: 'i' }
+            }).toArray()
+            res.json(result);
+        } catch (error) {
+            console.error('Error searching jobs:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
     app.post('/job', async (req, res) => {
       const newJob = req.body;
       console.log(newJob);
       const result = await jobCollection.insertOne(newJob)
       res.send(result)
     })
+
+    app.delete('/job/:id', async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        try {
+          const result = await jobCollection.deleteOne(query);
+          res.send(result);
+        } catch (error) {
+          console.error('Error deleting item:', error);
+          res.status(500).send('Error deleting item');
+        }
+      });
     
     // user api
     app.get('/user', async(req, res) => {
