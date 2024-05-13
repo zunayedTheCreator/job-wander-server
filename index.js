@@ -76,6 +76,30 @@ async function run() {
       res.send(result)
     })
 
+    app.put('/job/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const option = { upsert: true };
+      const updatedItem = req.body;
+      const item = {
+        $set: {
+            user_name: updatedItem.user_name, 
+            user_email: updatedItem.user_email, 
+            job_title: updatedItem.job_title, 
+            job_category: updatedItem.job_category, 
+            salary: updatedItem.salary, 
+            description: updatedItem.description, 
+            posting_date: updatedItem.posting_date, 
+            deadline_date: updatedItem.deadline_date, 
+            photo: updatedItem.photo,
+            total_applicants: updatedItem.total_applicants
+        }
+      }
+
+      const result = await jobCollection.updateOne(filter, item, option)
+      res.send(result)
+    })
+
     app.delete('/job/:id', async (req, res) => {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -87,7 +111,7 @@ async function run() {
           res.status(500).send('Error deleting item');
         }
       });
-    
+
     // user api
     app.get('/user', async(req, res) => {
         const cursor = userCollection.find();
