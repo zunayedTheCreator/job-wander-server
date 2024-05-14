@@ -158,11 +158,29 @@ async function run() {
     
     app.get('/applied/:email', async (req, res) => {
         const email = req.params.email;
-        const query = {email: email}
+        const query = {user_email: email}
         const cursor = appliedCollection.find(query);
         const result = await cursor.toArray();
         res.send(result);
     });
+    app.get('/applied/:identifier', async (req, res) => {
+      const identifier = req.params.identifier;
+      try {
+          let result;
+          if (ObjectId.isValid(identifier)) {
+          result = await appliedCollection.findOne({ _id: new ObjectId(identifier) });
+          } else {
+          result = await appliedCollection.find({ $or: [{ user_email: identifier }, { job_category: identifier }] }).toArray();
+          }
+          if (!result) {
+          return res.status(404).send('Item not found');
+          }
+          res.send(result);
+      } catch (error) {
+          console.error('Error retrieving item:', error);
+          res.status(500).send('Error retrieving item');
+      }
+      });
     
     app.post('/applied', async(req, res) => {
         const newUser = req.body;
