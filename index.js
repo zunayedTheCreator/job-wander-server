@@ -1,13 +1,21 @@
 const express = require('express')
 const cors = require('cors')
+const jwt = require('jsonwebtoken')
+const cookieParser = require('cookie-parser')
 const app = express();
 const port = process.env.PORT || 5000;
 require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
 // middleware
-app.use(cors())
+app.use(
+  cors({
+  origin: ['http://localhost:5173', 'https://job-wander.web.app/', 'https://job-wander.firebaseapp.com/'],
+  credentials: true,
+  }),
+  )
 app.use(express.json())
+app.use(cookieParser())
 
 const uri = `mongodb+srv://${process.env.VITE_USER}:${process.env.VITE_PASS}@cluster0.kbuydyl.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -20,55 +28,91 @@ const client = new MongoClient(uri, {
   }
 });
 
+// middlewares
+const logger = (req, res, next) => {
+  console.log('log: info', req.method, req.url);
+  next();
+}
+
+const verifyToken = (req, res, next) => {
+  const token = req?.cookies?.token;
+  console.log('middleware token', token);
+  if (!token) {
+    return res.status(401).send({message: 'unauthorized token'})
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({message: 'unauthorized token'}) 
+    }
+    req.user = decoded;
+    next();
+  })
+}
+
 async function run() {
   try {
       // Connect the client to the server	(optional starting in v4.7)
-      await client.connect();
+      // await client.connect();
       const { ObjectId } = require('mongodb');
       
       const userCollection = client.db('jobWander').collection('user');
       const jobCollection = client.db('jobWander').collection('job');
       const appliedCollection = client.db('jobWander').collection('appliedJob');
 
+    // auth api
+    app.post('/jwt', async(req, res) => {
+      const user = req.body;
+      console.log('user for token', user);
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1h'})
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none'
+      })
+      .send({success: true})
+    })
+
+    app.post('/logout', async(req, res) => {
+      const user = req.body;
+      console.log('logout', user);
+      res.clearCookie('token', {maxAge: 0}).send({success: true})
+    })
+
     // job api
     app.get('/job', async (req, res) => {
-        const cursor = jobCollection.find();
-        const result = await cursor.toArray();
-        res.send(result);
+      const cursor = jobCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
     });
-        
+
     app.get('/job/:identifier', async (req, res) => {
-    const identifier = req.params.identifier;
-    try {
-        let result;
-        if (ObjectId.isValid(identifier)) {
-        result = await jobCollection.findOne({ _id: new ObjectId(identifier) });
-        } else {
-        result = await jobCollection.find({ $or: [{ user_email: identifier }, { job_category: identifier }] }).toArray();
-        }
-        if (!result) {
-        return res.status(404).send('Item not found');
-        }
-        res.send(result);
-    } catch (error) {
-        console.error('Error retrieving item:', error);
-        res.status(500).send('Error retrieving item');
-    }
-    });
-
-    app.get('/job', async (req, res) => {
-        const { query } = req.query;
-
-        try {
-            const result = await jobCollection.find({
-                job_title: { $regex: query, $options: 'i' }
-            }).toArray()
-            res.json(result);
-        } catch (error) {
-            console.error('Error searching jobs:', error);
-            res.status(500).json({ error: 'Internal server error' });
-        }
-    });
+      const identifier = req.params.identifier;
+  
+      try {
+          let result;
+  
+          if (ObjectId.isValid(identifier)) {
+              result = await jobCollection.findOne({ _id: new ObjectId(identifier) });
+          } else if (identifier.includes('Jobs')) {
+              result = await jobCollection.find({ job_category: identifier }).toArray();
+          } else if (identifier.includes('@')) {
+              result = await jobCollection.find({ user_email: identifier }).toArray();
+          } else {
+              result = await jobCollection.find({ 
+                  job_title: { $regex: identifier, $options: 'i' }
+              }).toArray();
+          }
+  
+          if (!result) {
+              return res.status(404).send('Item not found');
+          }
+  
+          res.send(result);
+      } catch (error) {
+          console.error('Error retrieving item:', error);
+          return res.status(500).send('Error retrieving item');
+      }
+  });
 
     app.post('/job', async (req, res) => {
       const newJob = req.body;
@@ -156,31 +200,19 @@ async function run() {
         res.send(result);
     })
     
-    app.get('/applied/:email', async (req, res) => {
+    app.get('/applied/:email', logger, verifyToken, async (req, res) => {
+
+        console.log(req.params.email)
+        console.log('token owner', req.user.email)
+        if (req.params.email !== req.user.email) {
+          return res.status(403).send({massage: 'forbidden access'})
+        }
         const email = req.params.email;
         const query = {user_email: email}
         const cursor = appliedCollection.find(query);
         const result = await cursor.toArray();
         res.send(result);
     });
-    app.get('/applied/:identifier', async (req, res) => {
-      const identifier = req.params.identifier;
-      try {
-          let result;
-          if (ObjectId.isValid(identifier)) {
-          result = await appliedCollection.findOne({ _id: new ObjectId(identifier) });
-          } else {
-          result = await appliedCollection.find({ $or: [{ user_email: identifier }, { job_category: identifier }] }).toArray();
-          }
-          if (!result) {
-          return res.status(404).send('Item not found');
-          }
-          res.send(result);
-      } catch (error) {
-          console.error('Error retrieving item:', error);
-          res.status(500).send('Error retrieving item');
-      }
-      });
     
     app.post('/applied', async(req, res) => {
         const newUser = req.body;
@@ -190,7 +222,7 @@ async function run() {
     })
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
